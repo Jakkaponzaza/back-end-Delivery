@@ -39,13 +39,15 @@ const errorHandler = (err, req, res, next) => {
 };
 
 const setupMiddleware = (app) => {
+  //บอก Express ให้เชื่อถือ Render proxy
+  app.set('trust proxy', 1);
+
   // Apply rate limiting to all API routes
   app.use('/api', limiter);
 
   // Timeout middleware (20 seconds)
   app.use(timeout('20s'));
 
-  // CORS Configuration
   // CORS Configuration - รองรับ mobile app
   app.use(cors({
     origin: '*', // รับทุก origin สำหรับ mobile app
