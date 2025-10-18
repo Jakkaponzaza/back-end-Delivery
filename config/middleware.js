@@ -32,7 +32,7 @@ const errorHandler = (err, req, res, next) => {
     return res.status(503).json({ error: 'Database temporarily unavailable. Please try again.' });
   }
 
-  res.status(500).json({ 
+  res.status(500).json({
     error: 'Internal server error',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
   });
@@ -46,11 +46,11 @@ const setupMiddleware = (app) => {
   app.use(timeout('20s'));
 
   // CORS Configuration
+  // CORS Configuration - รองรับ mobile app
   app.use(cors({
-    origin: ['http://localhost:3000', 'http://10.0.2.2:3000', 'http://127.0.0.1:3000'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], 
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'], 
-    credentials: true
+    origin: '*', // รับทุก origin สำหรับ mobile app
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
   }));
 
   // Body Parser Configuration with increased limits (100MB)
@@ -58,7 +58,7 @@ const setupMiddleware = (app) => {
     limit: '100mb',
     parameterLimit: 100000
   }));
-  
+
   app.use(express.urlencoded({
     limit: '100mb',
     extended: true,
