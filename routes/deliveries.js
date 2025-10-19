@@ -21,6 +21,7 @@ router.get('/riders/:riderId/deliveries', async (req, res) => {
       return res.status(404).json({ error: 'Rider not found' });
     }
 
+    // ✅ ดึงข้อมูล delivery พร้อมพิกัดที่ปักหมุด
     const { data, error } = await supabase
       .from('delivery')
       .select(`
@@ -30,6 +31,12 @@ router.get('/riders/:riderId/deliveries', async (req, res) => {
         status,
         created_at,
         updated_at,
+        pickup_latitude,
+        pickup_longitude,
+        pickup_address,
+        delivery_latitude,
+        delivery_longitude,
+        delivery_address,
         parcels!inner (
           parcel_id,
           sender_id,
@@ -40,22 +47,12 @@ router.get('/riders/:riderId/deliveries', async (req, res) => {
           sender:users!sender_id (
             user_id,
             username,
-            phone,
-            addresses:user_address!member_id (
-              address_text,
-              latitude,
-              longitude
-            )
+            phone
           ),
           receiver:users!receiver_id (
             user_id,
             username,
-            phone,
-            addresses:user_address!member_id (
-              address_text,
-              latitude,
-              longitude
-            )
+            phone
           )
         )
       `)
@@ -65,8 +62,38 @@ router.get('/riders/:riderId/deliveries', async (req, res) => {
 
     if (error) throw error;
 
-    res.json(data || []);
+    // ✅ ประมวลผลข้อมูล - ใช้พิกัดจาก delivery แทน user_address
+    const processedData = (data || []).map(delivery => {
+      // ใช้พิกัดจาก delivery table (ที่ปักหมุด)
+      const pickupCoords = {
+        latitude: delivery.pickup_latitude,
+        longitude: delivery.pickup_longitude,
+        address_text: delivery.pickup_address || 'ไม่มีข้อมูลที่อยู่'
+      };
+
+      const deliveryCoords = {
+        latitude: delivery.delivery_latitude,
+        longitude: delivery.delivery_longitude,
+        address_text: delivery.delivery_address || 'ไม่มีข้อมูลที่อยู่'
+      };
+
+      // เพิ่มพิกัดเข้าไปใน sender และ receiver
+      if (delivery.parcels && delivery.parcels.sender) {
+        delivery.parcels.sender.pickup_coordinates = pickupCoords;
+      }
+
+      if (delivery.parcels && delivery.parcels.receiver) {
+        delivery.parcels.receiver.delivery_coordinates = deliveryCoords;
+      }
+
+      return delivery;
+    });
+
+    console.log(`✅ Found ${processedData.length} deliveries for rider ${riderId}`);
+
+    res.json(processedData);
   } catch (err) {
+    console.error('❌ Error getting rider deliveries:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -340,12 +367,13 @@ router.get('/deliveries/available', async (req, res) => {
   try {
     const cacheKey = 'available_deliveries';
     const cachedData = cache.get(cacheKey);
-    
+
     if (cachedData) {
       return res.json(cachedData);
     }
 
-    const { data, error } = await supabase
+    // ✅ ดึงข้อมูล parcels พร้อม delivery coordinates
+    const { data: parcels, error: parcelsError } = await supabase
       .from('parcels')
       .select(`
         parcel_id,
@@ -358,51 +386,70 @@ router.get('/deliveries/available', async (req, res) => {
         sender:users!sender_id (
           user_id,
           username,
-          phone,
-          addresses:user_address!member_id (
-            address_id,
-            address_text,
-            latitude,
-            longitude,
-            formatted_address,
-            place_id,
-            created_at
-          )
+          phone
         ),
         receiver:users!receiver_id (
           user_id,
           username,
-          phone,
-          addresses:user_address!member_id (
-            address_id,
-            address_text,
-            latitude,
-            longitude,
-            formatted_address,
-            place_id,
-            created_at
-          )
+          phone
         )
       `)
       .eq('status', 1) // Only waiting for rider
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (parcelsError) throw parcelsError;
 
-    // Sort addresses to use latest
-    const processedData = data.map(parcel => {
-      if (parcel.sender && parcel.sender.addresses) {
-        parcel.sender.addresses.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    // ✅ ดึงพิกัดจาก delivery table
+    const parcelIds = parcels.map(p => p.parcel_id);
+    
+    const { data: deliveries, error: deliveriesError } = await supabase
+      .from('delivery')
+      .select(`
+        parcel_id,
+        pickup_latitude,
+        pickup_longitude,
+        pickup_address,
+        delivery_latitude,
+        delivery_longitude,
+        delivery_address
+      `)
+      .in('parcel_id', parcelIds);
+
+    if (deliveriesError) throw deliveriesError;
+
+    // ✅ รวมข้อมูล parcels กับ delivery coordinates
+    const processedData = parcels.map(parcel => {
+      const delivery = deliveries.find(d => d.parcel_id === parcel.parcel_id);
+
+      if (delivery) {
+        // ใช้พิกัดจาก delivery table
+        if (parcel.sender) {
+          parcel.sender.pickup_coordinates = {
+            latitude: delivery.pickup_latitude,
+            longitude: delivery.pickup_longitude,
+            address_text: delivery.pickup_address || 'ไม่มีข้อมูลที่อยู่'
+          };
+        }
+
+        if (parcel.receiver) {
+          parcel.receiver.delivery_coordinates = {
+            latitude: delivery.delivery_latitude,
+            longitude: delivery.delivery_longitude,
+            address_text: delivery.delivery_address || 'ไม่มีข้อมูลที่อยู่'
+          };
+        }
       }
-      if (parcel.receiver && parcel.receiver.addresses) {
-        parcel.receiver.addresses.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      }
+
       return parcel;
     });
 
     cache.set(cacheKey, processedData);
-    res.json(processedData || []);
+
+    console.log(`✅ Found ${processedData.length} available deliveries`);
+
+    res.json(processedData);
   } catch (err) {
+    console.error('❌ Error getting available deliveries:', err);
     res.status(500).json({ error: err.message });
   }
 });
