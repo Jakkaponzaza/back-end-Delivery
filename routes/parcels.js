@@ -91,7 +91,6 @@ router.post('/parcels', async (req, res) => {
       item_name, 
       item_description, 
       description,
-      // เพิ่มพิกัดที่รับจาก Frontend
       pickup_latitude,
       pickup_longitude,
       pickup_address,
@@ -101,19 +100,14 @@ router.post('/parcels', async (req, res) => {
     } = req.body;
 
     console.log('📦 Creating parcel with coordinates:');
+    console.log('  Sender:', sender_id);
+    console.log('  Receiver:', receiver_id);
     console.log('  Pickup:', pickup_latitude, pickup_longitude);
     console.log('  Delivery:', delivery_latitude, delivery_longitude);
 
     // Validate required fields
     if (!sender_id || !receiver_id) {
       return res.status(400).json({ error: 'sender_id and receiver_id are required' });
-    }
-
-    // Validate coordinates if provided
-    if (delivery_latitude !== undefined && delivery_longitude !== undefined) {
-      if (isNaN(delivery_latitude) || isNaN(delivery_longitude)) {
-        return res.status(400).json({ error: 'Invalid delivery coordinates' });
-      }
     }
 
     // Create description
@@ -139,34 +133,56 @@ router.post('/parcels', async (req, res) => {
       }])
       .select();
 
-    if (parcelError) throw parcelError;
+    if (parcelError) {
+      console.error('❌ Error creating parcel:', parcelError);
+      throw parcelError;
+    }
 
     const parcel = parcelData[0];
+    console.log('✅ Parcel created:', parcel.parcel_id);
 
     // Create delivery record with coordinates
+    const deliveryInsert = {
+      parcel_id: parcel.parcel_id,
+      status: 0, // PENDING
+      created_at: new Date().toISOString()
+    };
+
+    // Add coordinates if provided
+    if (pickup_latitude !== undefined && pickup_latitude !== null) {
+      deliveryInsert.pickup_latitude = pickup_latitude;
+    }
+    if (pickup_longitude !== undefined && pickup_longitude !== null) {
+      deliveryInsert.pickup_longitude = pickup_longitude;
+    }
+    if (pickup_address) {
+      deliveryInsert.pickup_address = pickup_address;
+    }
+    if (delivery_latitude !== undefined && delivery_latitude !== null) {
+      deliveryInsert.delivery_latitude = delivery_latitude;
+    }
+    if (delivery_longitude !== undefined && delivery_longitude !== null) {
+      deliveryInsert.delivery_longitude = delivery_longitude;
+    }
+    if (delivery_address) {
+      deliveryInsert.delivery_address = delivery_address;
+    }
+
+    console.log('📍 Inserting delivery with data:', deliveryInsert);
+
     const { data: deliveryData, error: deliveryError } = await supabase
       .from('delivery')
-      .insert([{
-        parcel_id: parcel.parcel_id,
-        rider_id: null,
-        status: 0, // PENDING
-        pickup_latitude: pickup_latitude || null,
-        pickup_longitude: pickup_longitude || null,
-        pickup_address: pickup_address || null,
-        delivery_latitude: delivery_latitude || null,
-        delivery_longitude: delivery_longitude || null,
-        delivery_address: delivery_address || null,
-        created_at: new Date().toISOString()
-      }])
+      .insert([deliveryInsert])
       .select();
 
     if (deliveryError) {
-      // Rollback: delete parcel if delivery creation fails
+      console.error('❌ Error creating delivery:', deliveryError);
+      // Rollback: delete parcel
       await supabase.from('parcels').delete().eq('parcel_id', parcel.parcel_id);
       throw deliveryError;
     }
 
-    console.log('✅ Parcel created with delivery coordinates');
+    console.log('✅ Delivery created:', deliveryData[0]);
 
     // Clear cache
     cache.flushAll();
@@ -178,7 +194,7 @@ router.post('/parcels', async (req, res) => {
       delivery: deliveryData[0]
     });
   } catch (err) {
-    console.error('❌ Error creating parcel:', err);
+    console.error('❌ Error in POST /parcels:', err);
     res.status(500).json({ error: err.message });
   }
 });
