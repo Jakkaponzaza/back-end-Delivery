@@ -85,14 +85,38 @@ router.get('/parcels', async (req, res) => {
 // Create new parcel
 router.post('/parcels', async (req, res) => {
   try {
-    const { sender_id, receiver_id, item_name, item_description, description } = req.body;
+    const { 
+      sender_id, 
+      receiver_id, 
+      item_name, 
+      item_description, 
+      description,
+      // เพิ่มพิกัดที่รับจาก Frontend
+      pickup_latitude,
+      pickup_longitude,
+      pickup_address,
+      delivery_latitude,
+      delivery_longitude,
+      delivery_address
+    } = req.body;
+
+    console.log('📦 Creating parcel with coordinates:');
+    console.log('  Pickup:', pickup_latitude, pickup_longitude);
+    console.log('  Delivery:', delivery_latitude, delivery_longitude);
 
     // Validate required fields
     if (!sender_id || !receiver_id) {
       return res.status(400).json({ error: 'sender_id and receiver_id are required' });
     }
 
-    // Create description from item_name and item_description or use provided description
+    // Validate coordinates if provided
+    if (delivery_latitude !== undefined && delivery_longitude !== undefined) {
+      if (isNaN(delivery_latitude) || isNaN(delivery_longitude)) {
+        return res.status(400).json({ error: 'Invalid delivery coordinates' });
+      }
+    }
+
+    // Create description
     let finalDescription = description;
     if (!finalDescription) {
       if (item_name && item_description) {
@@ -104,25 +128,61 @@ router.post('/parcels', async (req, res) => {
       }
     }
 
-    const { data, error } = await supabase
+    // Insert parcel
+    const { data: parcelData, error: parcelError } = await supabase
       .from('parcels')
       .insert([{
         sender_id,
         receiver_id,
         description: finalDescription,
-        status: 1  // Start with WAITING_FOR_RIDER
+        status: 1  // WAITING_FOR_RIDER
       }])
       .select();
 
-    if (error) throw error;
+    if (parcelError) throw parcelError;
 
-    // Clear cache when new parcel is created
+    const parcel = parcelData[0];
+
+    // Create delivery record with coordinates
+    const { data: deliveryData, error: deliveryError } = await supabase
+      .from('delivery')
+      .insert([{
+        parcel_id: parcel.parcel_id,
+        rider_id: null,
+        status: 0, // PENDING
+        pickup_latitude: pickup_latitude || null,
+        pickup_longitude: pickup_longitude || null,
+        pickup_address: pickup_address || null,
+        delivery_latitude: delivery_latitude || null,
+        delivery_longitude: delivery_longitude || null,
+        delivery_address: delivery_address || null,
+        created_at: new Date().toISOString()
+      }])
+      .select();
+
+    if (deliveryError) {
+      // Rollback: delete parcel if delivery creation fails
+      await supabase.from('parcels').delete().eq('parcel_id', parcel.parcel_id);
+      throw deliveryError;
+    }
+
+    console.log('✅ Parcel created with delivery coordinates');
+
+    // Clear cache
     cache.flushAll();
-    res.status(201).json(data[0]);
+
+    res.status(201).json({
+      success: true,
+      message: 'สร้างพัสดุสำเร็จ',
+      parcel: parcel,
+      delivery: deliveryData[0]
+    });
   } catch (err) {
+    console.error('❌ Error creating parcel:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // Update parcel status
 router.patch('/parcels/:id/status', async (req, res) => {
