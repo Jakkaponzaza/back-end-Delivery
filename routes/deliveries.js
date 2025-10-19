@@ -95,7 +95,7 @@ router.post('/parcels/:parcelId/accept', async (req, res) => {
       });
     }
 
-    // 2. Check if parcel is still waiting for rider (prevent duplicate acceptance)
+    // 2. Check if parcel is still waiting for rider
     const { data: parcel, error: parcelCheckError } = await supabase
       .from('parcels')
       .select('parcel_id, status')
@@ -111,11 +111,13 @@ router.post('/parcels/:parcelId/accept', async (req, res) => {
     }
 
     // 3. Check if another rider already accepted this job
+    // ✅ แก้ไขตรงนี้ - เช็คว่ามี rider_id หรือยัง
     const { data: existingDelivery, error: deliveryCheckError } = await supabase
       .from('delivery')
-      .select('delivery_id, rider_id')
+      .select('delivery_id, rider_id, status')
       .eq('parcel_id', parcelId)
-      .in('status', [0, 1, 2]); // All statuses except cancelled
+      .not('rider_id', 'is', null) // ✅ เพิ่มเงื่อนไขนี้
+      .in('status', [0, 1, 2]);
 
     if (deliveryCheckError) {
       return res.status(500).json({ error: 'ไม่สามารถตรวจสอบสถานะการส่งได้' });
@@ -125,7 +127,7 @@ router.post('/parcels/:parcelId/accept', async (req, res) => {
       return res.status(400).json({ error: 'พัสดุนี้มีไรเดอร์รับไปแล้ว' });
     }
 
-    // 4. Use transaction to prevent race condition
+    // 4. Update parcel status
     const { data: updatedParcel, error: parcelUpdateError } = await supabase
       .from('parcels')
       .update({ 
@@ -133,43 +135,48 @@ router.post('/parcels/:parcelId/accept', async (req, res) => {
         updated_at: new Date().toISOString()
       })
       .eq('parcel_id', parcelId)
-      .eq('status', 1) // Additional condition: must still be status 1
+      .eq('status', 1) // Must still be status 1
       .select();
 
     if (parcelUpdateError || !updatedParcel || updatedParcel.length === 0) {
       return res.status(400).json({ error: 'ไม่สามารถรับงานได้ อาจมีไรเดอร์คนอื่นรับไปแล้ว' });
     }
 
-    // 5. Create delivery record
-    const { data: newDelivery, error: deliveryError } = await supabase
+    // 5. Update existing delivery record (instead of creating new one)
+    const { data: updatedDelivery, error: deliveryError } = await supabase
       .from('delivery')
-      .insert([{
-        parcel_id: parcelId,
+      .update({
         rider_id: rider_id,
         status: 0, // PENDING
-        created_at: new Date().toISOString()
-      }])
+        updated_at: new Date().toISOString()
+      })
+      .eq('parcel_id', parcelId)
+      .is('rider_id', null) // Only update if no rider yet
       .select();
 
-    if (deliveryError) {
+    if (deliveryError || !updatedDelivery || updatedDelivery.length === 0) {
       // Rollback parcel status
       await supabase
         .from('parcels')
         .update({ status: 1 })
         .eq('parcel_id', parcelId);
-      throw deliveryError;
+      
+      return res.status(400).json({ error: 'ไม่สามารถรับงานได้ อาจมีไรเดอร์คนอื่นรับไปแล้ว' });
     }
 
-    // Clear cache when parcel is accepted
+    console.log('✅ Rider accepted parcel:', parcelId, 'by rider:', rider_id);
+
+    // Clear cache
     cache.flushAll();
 
     res.status(201).json({
       success: true,
       message: 'รับงานสำเร็จ',
-      delivery: newDelivery[0],
+      delivery: updatedDelivery[0],
       parcel_status: 2
     });
   } catch (err) {
+    console.error('❌ Error accepting parcel:', err);
     res.status(500).json({ error: err.message });
   }
 });
