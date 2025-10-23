@@ -91,24 +91,49 @@ router.post('/parcels', async (req, res) => {
       item_name, 
       item_description, 
       description,
-      pickup_latitude,
-      pickup_longitude,
-      pickup_address,
-      delivery_latitude,
-      delivery_longitude,
-      delivery_address
+      sender_address_id,
+      receiver_address_id
     } = req.body;
 
-    console.log('📦 Creating parcel with coordinates:');
-    console.log('  Sender:', sender_id);
-    console.log('  Receiver:', receiver_id);
-    console.log('  Pickup:', pickup_latitude, pickup_longitude);
-    console.log('  Delivery:', delivery_latitude, delivery_longitude);
+    console.log('📦 Creating parcel:');
+    console.log('  Sender:', sender_id, 'Address ID:', sender_address_id);
+    console.log('  Receiver:', receiver_id, 'Address ID:', receiver_address_id);
 
     // Validate required fields
     if (!sender_id || !receiver_id) {
       return res.status(400).json({ error: 'sender_id and receiver_id are required' });
     }
+
+    if (!sender_address_id || !receiver_address_id) {
+      return res.status(400).json({ error: 'sender_address_id and receiver_address_id are required' });
+    }
+
+    // Get sender address
+    const { data: senderAddress, error: senderAddressError } = await supabase
+      .from('user_address')
+      .select('address_id, address_text, latitude, longitude, formatted_address')
+      .eq('address_id', sender_address_id)
+      .eq('member_id', sender_id)
+      .single();
+
+    if (senderAddressError || !senderAddress) {
+      return res.status(404).json({ error: 'Sender address not found' });
+    }
+
+    // Get receiver address
+    const { data: receiverAddress, error: receiverAddressError } = await supabase
+      .from('user_address')
+      .select('address_id, address_text, latitude, longitude, formatted_address')
+      .eq('address_id', receiver_address_id)
+      .eq('member_id', receiver_id)
+      .single();
+
+    if (receiverAddressError || !receiverAddress) {
+      return res.status(404).json({ error: 'Receiver address not found' });
+    }
+
+    console.log('📍 Pickup:', senderAddress.latitude, senderAddress.longitude);
+    console.log('📍 Delivery:', receiverAddress.latitude, receiverAddress.longitude);
 
     // Create description
     let finalDescription = description;
@@ -141,32 +166,18 @@ router.post('/parcels', async (req, res) => {
     const parcel = parcelData[0];
     console.log('✅ Parcel created:', parcel.parcel_id);
 
-    // Create delivery record with coordinates
+    // Create delivery record with coordinates from user_address
     const deliveryInsert = {
       parcel_id: parcel.parcel_id,
       status: 0, // PENDING
+      pickup_latitude: senderAddress.latitude,
+      pickup_longitude: senderAddress.longitude,
+      pickup_address: senderAddress.formatted_address || senderAddress.address_text,
+      delivery_latitude: receiverAddress.latitude,
+      delivery_longitude: receiverAddress.longitude,
+      delivery_address: receiverAddress.formatted_address || receiverAddress.address_text,
       created_at: new Date().toISOString()
     };
-
-    // Add coordinates if provided
-    if (pickup_latitude !== undefined && pickup_latitude !== null) {
-      deliveryInsert.pickup_latitude = pickup_latitude;
-    }
-    if (pickup_longitude !== undefined && pickup_longitude !== null) {
-      deliveryInsert.pickup_longitude = pickup_longitude;
-    }
-    if (pickup_address) {
-      deliveryInsert.pickup_address = pickup_address;
-    }
-    if (delivery_latitude !== undefined && delivery_latitude !== null) {
-      deliveryInsert.delivery_latitude = delivery_latitude;
-    }
-    if (delivery_longitude !== undefined && delivery_longitude !== null) {
-      deliveryInsert.delivery_longitude = delivery_longitude;
-    }
-    if (delivery_address) {
-      deliveryInsert.delivery_address = delivery_address;
-    }
 
     console.log('📍 Inserting delivery with data:', deliveryInsert);
 
@@ -193,12 +204,12 @@ router.post('/parcels', async (req, res) => {
       parcel: parcel,
       delivery: deliveryData[0]
     });
+
   } catch (err) {
     console.error('❌ Error in POST /parcels:', err);
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // Update parcel status
 router.patch('/parcels/:id/status', async (req, res) => {
