@@ -10,7 +10,7 @@ router.get('/parcels', async (req, res) => {
     const { status } = req.query;
     const cacheKey = status ? `parcels_status_${status}` : 'all_parcels';
     const cachedData = cache.get(cacheKey);
-    
+
     if (cachedData) {
       return res.json(cachedData);
     }
@@ -18,43 +18,46 @@ router.get('/parcels', async (req, res) => {
     let query = supabase
       .from('parcels')
       .select(`
-        parcel_id,
-        sender_id,
-        receiver_id,
-        description,
-        status,
-        created_at,
-        updated_at,
-        sender:users!sender_id (
-          user_id,
-          username,
-          phone,
-          addresses:user_address!member_id (
-            address_id,
-            address_text,
-            latitude,
-            longitude,
-            formatted_address,
-            place_id,
-            created_at
-          )
-        ),
-        receiver:users!receiver_id (
-          user_id,
-          username,
-          phone,
-          addresses:user_address!member_id (
-            address_id,
-            address_text,
-            latitude,
-            longitude,
-            formatted_address,
-            place_id,
-            created_at
-          )
+      parcel_id,
+      sender_id,
+      receiver_id,
+      description,
+      status,
+      created_at,
+      updated_at,
+      sender:users!sender_id (
+        user_id,
+        username,
+        phone,
+        profile_image,
+        addresses:user_address!member_id (
+          address_id,
+          address_text,
+          latitude,
+          longitude,
+          formatted_address,
+          place_id,
+          created_at
         )
-      `)
+      ),
+      receiver:users!receiver_id (
+        user_id,
+        username,
+        phone,
+        profile_image,
+        addresses:user_address!member_id (
+          address_id,
+          address_text,
+          latitude,
+          longitude,
+          formatted_address,
+          place_id,
+          created_at
+        )
+      )
+    `)
       .order('created_at', { ascending: false });
+
 
     // Filter by status if provided
     if (status) {
@@ -85,11 +88,11 @@ router.get('/parcels', async (req, res) => {
 // Create new parcel
 router.post('/parcels', async (req, res) => {
   try {
-    const { 
-      sender_id, 
-      receiver_id, 
-      item_name, 
-      item_description, 
+    const {
+      sender_id,
+      receiver_id,
+      item_name,
+      item_description,
       description,
       sender_address_id,
       receiver_address_id
@@ -321,54 +324,57 @@ router.get('/users/:userId/deliveries', async (req, res) => {
     }
 
     // Get parcel data with rider info from delivery table
-    const { data, error } = await supabase
-      .from('parcels')
-      .select(`
-        parcel_id,
-        sender_id,
-        receiver_id,
-        description,
+      const { data, error } = await supabase
+        .from('parcels')
+        .select(`
+      parcel_id,
+      sender_id,
+      receiver_id,
+      description,
+      status,
+      created_at,
+      updated_at,
+      delivery:delivery!parcel_id (
+        delivery_id,
+        rider_id,
         status,
         created_at,
-        updated_at,
-        delivery:delivery!parcel_id (
-          delivery_id,
-          rider_id,
-          status,
-          created_at,
-          updated_at
-        ),
-        sender:users!sender_id (
-          user_id,
-          username,
-          phone,
-          addresses:user_address!member_id (
-            address_id,
-            address_text,
-            latitude,
-            longitude,
-            formatted_address,
-            place_id,
-            created_at
-          )
-        ),
-        receiver:users!receiver_id (
-          user_id,
-          username,
-          phone,
-          addresses:user_address!member_id (
-            address_id,
-            address_text,
-            latitude,
-            longitude,
-            formatted_address,
-            place_id,
-            created_at
-          )
+        updated_at
+      ),
+      sender:users!sender_id (
+        user_id,
+        username,
+        phone,
+        profile_image,
+        addresses:user_address!member_id (
+          address_id,
+          address_text,
+          latitude,
+          longitude,
+          formatted_address,
+          place_id,
+          created_at
         )
-      `)
+      ),
+      receiver:users!receiver_id (
+        user_id,
+        username,
+        phone,
+        profile_image,
+        addresses:user_address!member_id (
+          address_id,
+          address_text,
+          latitude,
+          longitude,
+          formatted_address,
+          place_id,
+          created_at
+        )
+      )
+    `)
       .or(`sender_id.eq.${userIdValue},receiver_id.eq.${userIdValue}`)
       .order('created_at', { ascending: false });
+
 
     if (error) throw error;
 
