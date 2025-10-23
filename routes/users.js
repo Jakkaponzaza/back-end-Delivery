@@ -137,4 +137,36 @@ router.get('/users/:userId/addresses', async (req, res) => {
   }
 });
 
+// Delete user address
+router.delete('/users/:userId/addresses/:addressId', async (req, res) => {
+  try {
+    const { userId, addressId } = req.params;
+
+    // ลบที่อยู่
+    const { data, error } = await supabase
+      .from('user_address')
+      .delete()
+      .eq('address_id', addressId)
+      .eq('member_id', userId)
+      .select();
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: 'Address not found' });
+    }
+
+    // Clear cache
+    cache.del(`user_addresses_${userId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Address deleted successfully',
+      deleted_address: data[0]
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 module.exports = router;
