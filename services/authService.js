@@ -123,7 +123,7 @@ const getUserAddresses = async (userId) => {
     .from('user_address')
     .select('*')
     .eq('member_id', userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: true });
 
   if (error) throw error;
 

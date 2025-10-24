@@ -142,6 +142,23 @@ router.delete('/users/:userId/addresses/:addressId', async (req, res) => {
   try {
     const { userId, addressId } = req.params;
 
+    const { data: allAddresses } = await supabase
+      .from('user_address')
+      .select('address_id, created_at')
+      .eq('member_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (allAddresses && allAddresses.length > 0) {
+      const firstAddressId = allAddresses[0].address_id;
+      
+      // ถ้าพยายามลบที่อยู่แรก ให้ห้าม
+      if (addressId == firstAddressId) {
+        return res.status(403).json({ 
+          error: 'ไม่สามารถลบที่อยู่หลักได้' 
+        });
+      }
+    }
+
     // ลบที่อยู่
     const { data, error } = await supabase
       .from('user_address')
@@ -168,5 +185,6 @@ router.delete('/users/:userId/addresses/:addressId', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
 
 module.exports = router;
