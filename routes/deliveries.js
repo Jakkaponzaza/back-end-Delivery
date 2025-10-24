@@ -212,6 +212,7 @@ router.post('/parcels/:parcelId/accept', async (req, res) => {
 router.get('/riders/:riderId/history', async (req, res) => {
   try {
     const { riderId } = req.params;
+    
     const { data, error } = await supabase
       .from('delivery')
       .select(`
@@ -221,11 +222,14 @@ router.get('/riders/:riderId/history', async (req, res) => {
         status,
         created_at,
         updated_at,
+        pickup_image,
+        delivery_image,
         parcels!inner (
           parcel_id,
           sender_id,
           receiver_id,
           description,
+          item_image,
           status,
           created_at,
           sender:users!sender_id (
@@ -251,6 +255,55 @@ router.get('/riders/:riderId/history', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Get rider history
+router.get('/riders/:riderId/history', async (req, res) => {
+  try {
+    const { riderId } = req.params;
+    
+    const { data, error } = await supabase
+      .from('delivery')
+      .select(`
+        delivery_id,
+        parcel_id,
+        rider_id,
+        status,
+        created_at,
+        updated_at,
+        pickup_image,
+        delivery_image,
+        parcels!inner (
+          parcel_id,
+          sender_id,
+          receiver_id,
+          description,
+          item_image,
+          status,
+          created_at,
+          sender:users!sender_id (
+            user_id,
+            username,
+            phone
+          ),
+          receiver:users!receiver_id (
+            user_id,
+            username,
+            phone
+          )
+        )
+      `)
+      .eq('rider_id', riderId)
+      .eq('status', 2) // Only delivered
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json(data || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // Update delivery status
 router.patch('/deliveries/:id/status', async (req, res) => {

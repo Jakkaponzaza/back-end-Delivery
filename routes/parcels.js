@@ -330,86 +330,99 @@ router.get('/users/:userId/deliveries', async (req, res) => {
       userIdValue = parseInt(userId);
     }
 
-    // Get parcel data with rider info from delivery table
-      const { data, error } = await supabase
-        .from('parcels')
-        .select(`
-      parcel_id,
-      sender_id,
-      receiver_id,
-      description,
-      status,
-      created_at,
-      updated_at,
-      delivery:delivery!parcel_id (
-        delivery_id,
-        rider_id,
+    // Get parcel data with rider info and delivery images from delivery table
+    const { data, error } = await supabase
+      .from('parcels')
+      .select(`
+        parcel_id,
+        sender_id,
+        receiver_id,
+        description,
+        item_image,
         status,
         created_at,
-        updated_at
-      ),
-      sender:users!sender_id (
-        user_id,
-        username,
-        phone,
-        profile_image,
-        addresses:user_address!member_id (
-          address_id,
-          address_text,
-          latitude,
-          longitude,
-          formatted_address,
-          place_id,
-          created_at
+        updated_at,
+        delivery:delivery!parcel_id (
+          delivery_id,
+          rider_id,
+          status,
+          created_at,
+          updated_at,
+          pickup_image,
+          delivery_image
+        ),
+        sender:users!sender_id (
+          user_id,
+          username,
+          phone,
+          profile_image,
+          addresses:user_address!member_id (
+            address_id,
+            address_text,
+            latitude,
+            longitude,
+            formatted_address,
+            place_id,
+            created_at
+          )
+        ),
+        receiver:users!receiver_id (
+          user_id,
+          username,
+          phone,
+          profile_image,
+          addresses:user_address!member_id (
+            address_id,
+            address_text,
+            latitude,
+            longitude,
+            formatted_address,
+            place_id,
+            created_at
+          )
         )
-      ),
-      receiver:users!receiver_id (
-        user_id,
-        username,
-        phone,
-        profile_image,
-        addresses:user_address!member_id (
-          address_id,
-          address_text,
-          latitude,
-          longitude,
-          formatted_address,
-          place_id,
-          created_at
-        )
-      )
-    `)
+      `)
       .or(`sender_id.eq.${userIdValue},receiver_id.eq.${userIdValue}`)
       .order('created_at', { ascending: false });
 
-
     if (error) throw error;
 
-    // Sort addresses to use latest and add rider info
+    // Sort addresses to use latest and add rider info + images
     const processedData = data.map(parcel => {
       // Sort sender addresses by created_at (latest first)
       if (parcel.sender && parcel.sender.addresses) {
-        parcel.sender.addresses.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        parcel.sender.addresses.sort((a, b) => 
+          new Date(b.created_at) - new Date(a.created_at)
+        );
       }
 
       // Sort receiver addresses by created_at (latest first)
       if (parcel.receiver && parcel.receiver.addresses) {
-        parcel.receiver.addresses.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        parcel.receiver.addresses.sort((a, b) => 
+          new Date(b.created_at) - new Date(a.created_at)
+        );
       }
 
-      // Add rider info from delivery table
+      // Add rider info and images from delivery table
       if (parcel.delivery && parcel.delivery.length > 0) {
-        // Use latest delivery record (in case there are multiple deliveries for same parcel)
-        const latestDelivery = parcel.delivery.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+        // Use latest delivery record
+        const latestDelivery = parcel.delivery.sort((a, b) => 
+          new Date(b.created_at) - new Date(a.created_at)
+        )[0];
+        
         parcel.rider_id = latestDelivery.rider_id;
         parcel.delivery_status = latestDelivery.status;
         parcel.delivery_created_at = latestDelivery.created_at;
         parcel.delivery_updated_at = latestDelivery.updated_at;
+        parcel.pickup_image = latestDelivery.pickup_image;
+        parcel.delivery_image = latestDelivery.delivery_image;
       } else {
         parcel.rider_id = null;
         parcel.delivery_status = null;
         parcel.delivery_created_at = null;
         parcel.delivery_updated_at = null;
+        parcel.pickup_image = null;
+        parcel.delivery_image = null;
       }
 
       return parcel;
@@ -420,4 +433,5 @@ router.get('/users/:userId/deliveries', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 module.exports = router;
