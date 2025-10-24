@@ -298,21 +298,48 @@ router.patch('/deliveries/:id/status', async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
+    // ⭐ เพิ่ม logging
+    console.log('📸 Image received:', image ? 'Yes' : 'No');
+    console.log('📊 Status:', status);
+    console.log('🆔 Delivery ID:', deliveryId);
+
     // Add image if provided (for status 1 and 2)
     if (image && (status === 1 || status === 2)) {
       try {
+        console.log('🔄 Uploading image to storage...');
+        console.log('📏 Image length:', image.length);
+        
         const imageUrl = await uploadBase64Image(image, 'delivery-status');
+        
+        console.log('✅ Image uploaded successfully:', imageUrl);
+        
         if (imageUrl) {
           if (status === 1) {
             updateData.pickup_image = imageUrl; // Pickup image
+            console.log('📦 Set pickup_image:', imageUrl);
           } else if (status === 2) {
             updateData.delivery_image = imageUrl; // Delivery image
+            console.log('📦 Set delivery_image:', imageUrl);
           }
+        } else {
+          console.log('⚠️ Image URL is null after upload');
         }
       } catch (imageError) {
+        // ⭐ เพิ่ม error logging
+        console.error('❌ Error uploading image:', imageError);
+        console.error('Error message:', imageError.message);
+        console.error('Error stack:', imageError.stack);
         // Don't let image error block status update
       }
+    } else {
+      if (!image) {
+        console.log('⏭️ No image provided');
+      } else {
+        console.log('⏭️ Wrong status for image upload (status:', status, ')');
+      }
     }
+
+    console.log('💾 Final update data:', JSON.stringify(updateData, null, 2));
 
     // Update delivery status
     const { data: updatedDelivery, error: deliveryError } = await supabase
@@ -322,8 +349,11 @@ router.patch('/deliveries/:id/status', async (req, res) => {
       .select();
 
     if (deliveryError) {
+      console.error('❌ Error updating delivery in database:', deliveryError);
       return res.status(500).json({ error: deliveryError.message });
     }
+
+    console.log('✅ Delivery updated in database:', updatedDelivery[0]);
 
     // Update parcel status to sync
     const { error: parcelError } = await supabase
@@ -335,6 +365,7 @@ router.patch('/deliveries/:id/status', async (req, res) => {
       .eq('parcel_id', existingDelivery.parcel_id);
 
     if (parcelError) {
+      console.error('❌ Error updating parcel:', parcelError);
       return res.status(500).json({ error: parcelError.message });
     }
 
@@ -358,6 +389,7 @@ router.patch('/deliveries/:id/status', async (req, res) => {
       updated_data: updatedDelivery[0]
     });
   } catch (err) {
+    console.error('❌ Error in PATCH /deliveries/:id/status:', err);
     res.status(500).json({ error: err.message });
   }
 });
