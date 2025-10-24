@@ -77,6 +77,7 @@ router.get('/riders/:id', async (req, res) => {
 router.get('/riders/:riderId/current-job', async (req, res) => {
   try {
     const { riderId } = req.params;
+
     const { data, error } = await supabase
       .from('delivery')
       .select(`
@@ -89,6 +90,7 @@ router.get('/riders/:riderId/current-job', async (req, res) => {
         parcels!inner (
           parcel_id,
           description,
+          item_image,
           sender:users!sender_id (username, phone),
           receiver:users!receiver_id (username, phone)
         )
@@ -109,5 +111,6 @@ router.get('/riders/:riderId/current-job', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 module.exports = router;
