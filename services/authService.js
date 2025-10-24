@@ -46,7 +46,7 @@ const registerUser = async (userData) => {
 
 // Register rider
 const registerRider = async (riderData) => {
-  const { name, phone, password, profile_image, vehicle_image, license_plate } = riderData;
+  const { name, phone, password, profile_image, vehicle_image, license_plate, location } = riderData;
 
   // Check if rider already exists
   const { data: existingRider } = await supabase
@@ -71,7 +71,8 @@ const registerRider = async (riderData) => {
       password: hashedPassword,
       profile_image: profile_image || null,
       vehicle_image: vehicle_image || null,
-      license_plate
+      license_plate,
+      location: location || null  
     }])
     .select();
 
@@ -86,10 +87,12 @@ const registerRider = async (riderData) => {
       phone: data[0].phone,
       profile_image: data[0].profile_image,
       vehicle_image: data[0].vehicle_image,
-      license_plate: data[0].license_plate
+      license_plate: data[0].license_plate,
+      location: data[0].location 
     }
   };
 };
+
 
 // Add user address
 const addUserAddress = async (addressData) => {
