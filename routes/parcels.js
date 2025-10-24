@@ -22,7 +22,7 @@ router.get('/parcels', async (req, res) => {
         sender_id,
         receiver_id,
         description,
-        item_image,          // ⭐ เพิ่มบรรทัดนี้
+        item_image,         
         status,
         created_at,
         updated_at,
