@@ -10,7 +10,7 @@ router.get('/parcels', async (req, res) => {
     const { status } = req.query;
     const cacheKey = status ? `parcels_status_${status}` : 'all_parcels';
     const cachedData = cache.get(cacheKey);
-
+    
     if (cachedData) {
       return res.json(cachedData);
     }
@@ -18,46 +18,46 @@ router.get('/parcels', async (req, res) => {
     let query = supabase
       .from('parcels')
       .select(`
-      parcel_id,
-      sender_id,
-      receiver_id,
-      description,
-      status,
-      created_at,
-      updated_at,
-      sender:users!sender_id (
-        user_id,
-        username,
-        phone,
-        profile_image,
-        addresses:user_address!member_id (
-          address_id,
-          address_text,
-          latitude,
-          longitude,
-          formatted_address,
-          place_id,
-          created_at
+        parcel_id,
+        sender_id,
+        receiver_id,
+        description,
+        item_image,          // ⭐ เพิ่มบรรทัดนี้
+        status,
+        created_at,
+        updated_at,
+        sender:users!sender_id (
+          user_id,
+          username,
+          phone,
+          profile_image,
+          addresses:user_address!member_id (
+            address_id,
+            address_text,
+            latitude,
+            longitude,
+            formatted_address,
+            place_id,
+            created_at
+          )
+        ),
+        receiver:users!receiver_id (
+          user_id,
+          username,
+          phone,
+          profile_image,
+          addresses:user_address!member_id (
+            address_id,
+            address_text,
+            latitude,
+            longitude,
+            formatted_address,
+            place_id,
+            created_at
+          )
         )
-      ),
-      receiver:users!receiver_id (
-        user_id,
-        username,
-        phone,
-        profile_image,
-        addresses:user_address!member_id (
-          address_id,
-          address_text,
-          latitude,
-          longitude,
-          formatted_address,
-          place_id,
-          created_at
-        )
-      )
-    `)
+      `)
       .order('created_at', { ascending: false });
-
 
     // Filter by status if provided
     if (status) {
@@ -65,15 +65,20 @@ router.get('/parcels', async (req, res) => {
     }
 
     const { data, error } = await query;
+    
     if (error) throw error;
 
     // Sort addresses to use latest
     const processedData = data.map(parcel => {
       if (parcel.sender && parcel.sender.addresses) {
-        parcel.sender.addresses.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        parcel.sender.addresses.sort((a, b) => 
+          new Date(b.created_at) - new Date(a.created_at)
+        );
       }
       if (parcel.receiver && parcel.receiver.addresses) {
-        parcel.receiver.addresses.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        parcel.receiver.addresses.sort((a, b) => 
+          new Date(b.created_at) - new Date(a.created_at)
+        );
       }
       return parcel;
     });
