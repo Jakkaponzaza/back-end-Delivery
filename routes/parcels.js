@@ -93,6 +93,7 @@ router.post('/parcels', async (req, res) => {
       receiver_id,
       item_name,
       item_description,
+      item_image,  // ⭐ เพิ่มบรรทัดนี้
       description,
       sender_address_id,
       receiver_address_id
@@ -101,6 +102,7 @@ router.post('/parcels', async (req, res) => {
     console.log('📦 Creating parcel:');
     console.log('  Sender:', sender_id, 'Address ID:', sender_address_id);
     console.log('  Receiver:', receiver_id, 'Address ID:', receiver_address_id);
+    console.log('  Item Image:', item_image ? 'Yes' : 'No');  // ⭐ เพิ่ม log
 
     // Validate required fields
     if (!sender_id || !receiver_id) {
@@ -157,6 +159,7 @@ router.post('/parcels', async (req, res) => {
         sender_id,
         receiver_id,
         description: finalDescription,
+        item_image: item_image || null,  // ⭐ เพิ่มบรรทัดนี้
         status: 1  // WAITING_FOR_RIDER
       }])
       .select();
@@ -207,7 +210,6 @@ router.post('/parcels', async (req, res) => {
       parcel: parcel,
       delivery: deliveryData[0]
     });
-
   } catch (err) {
     console.error('❌ Error in POST /parcels:', err);
     res.status(500).json({ error: err.message });

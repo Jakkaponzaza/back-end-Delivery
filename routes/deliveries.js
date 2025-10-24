@@ -372,7 +372,7 @@ router.get('/deliveries/available', async (req, res) => {
       return res.json(cachedData);
     }
 
-    // ✅ ดึงข้อมูล parcels พร้อม delivery coordinates
+    // ✅ ดึงข้อมูล parcels พร้อม item_image
     const { data: parcels, error: parcelsError } = await supabase
       .from('parcels')
       .select(`
@@ -380,6 +380,7 @@ router.get('/deliveries/available', async (req, res) => {
         sender_id,
         receiver_id,
         description,
+        item_image,
         status,
         created_at,
         updated_at,
@@ -420,7 +421,7 @@ router.get('/deliveries/available', async (req, res) => {
     // ✅ รวมข้อมูล parcels กับ delivery coordinates
     const processedData = parcels.map(parcel => {
       const delivery = deliveries.find(d => d.parcel_id === parcel.parcel_id);
-
+      
       if (delivery) {
         // ใช้พิกัดจาก delivery table
         if (parcel.sender) {
@@ -430,7 +431,7 @@ router.get('/deliveries/available', async (req, res) => {
             address_text: delivery.pickup_address || 'ไม่มีข้อมูลที่อยู่'
           };
         }
-
+        
         if (parcel.receiver) {
           parcel.receiver.delivery_coordinates = {
             latitude: delivery.delivery_latitude,
@@ -439,19 +440,18 @@ router.get('/deliveries/available', async (req, res) => {
           };
         }
       }
-
+      
       return parcel;
     });
 
     cache.set(cacheKey, processedData);
-
     console.log(`✅ Found ${processedData.length} available deliveries`);
-
     res.json(processedData);
   } catch (err) {
     console.error('❌ Error getting available deliveries:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 module.exports = router;
